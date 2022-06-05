@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+		<title>Test</title>
+
+		<link href="https://js.arcgis.com/4.23/esri/themes/light/main.css" rel="stylesheet" type="text/css" />
+		<link rel="stylesheet" href="https://js.arcgis.com/4.23/esri/themes/light/main.css">
+
+		<script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+		<style>
+			html,
+			body,
+			
+			#viewDiv {
+				padding: 0;
+				margin: 0;
+				height: 100%;
+				width: 100%;
+				z-index: -1;
+			}
+
+			#infoDiv {
+				position: absolute;
+				width: 300px;
+				bottom: 12px;
+				padding: 20px;
+				background-color: white;
+				z-index: 1;
+			}
+
+			button {
+				display: block;
+				margin: 10px auto;
+				border: 1px solid #0079c1;
+				background-color: #005e95;
+				color: #fff;
+				font-size: 15px;
+				padding: 4px 8px;
+			}
+
+			#layerController {
+				position: absolute;
+				top: 12px;
+				right: 12px;
+				width: 100px;
+				height: 20px;
+				/* border: 1px solid black; */
+				z-index: 1;
+				overflow: hidden;
+			}
+
+			#information {
+				position: absolute;
+				width: 240px;
+				height: 24px;
+				bottom: 20px;
+				left:1250px;
+				font-size: 12px;
+				padding: 12px;
+				background-color: white;
+				z-index: 1;
+			}
+			.content{
+				text-indent: 2em;
+			}
+		</style>
+
+		<script src="https://js.arcgis.com/4.23/"></script>
+	</head>
+
+	<body>
+		<div id="viewDiv" class="esri-widget"></div>
+		<!-- 		<div id="infoDiv">
+			<div id="content"></div>
+			<button id="start-btn">开始播放</button>
+		</div> -->
+		<div id="layerController" >
+			<select id="bm">
+			</select>
+		</div>
+		<div id="information">
+			<span id="position"></span>
+			<p id="scaleNum"></p>
+		</div>
+		<div id="infoDiv">
+			<div id="content"></div>
+			<button id="start-btn">Next</button>
+		</div>
+		<!-- ----------------------------------------------------------------------------------------------- -->
+		<script>
+			// alert("已刷新！");
+// --------------------------------定义图层管理函数-------------------------------------------------------------------
+			baseMap = ["satellite", "osm", "oceans", "national-geographic", "hybrid", "gray", "dark-gray"];
+			//初始化图层管理控件
+			function addBasemap() {
+				//管理底图
+				let bm = $('#bm');
+				//底图下拉列表
+				for (let i = 0; i < baseMap.length; i++) {
+					let option = $('<option value=' + baseMap[i] + '>' + baseMap[i] + '</option>');
+					bm.append(option);
+				};
+			};
+			//调用图层管理控件，加载底图
+			addBasemap();
+// --------------------------------------------加载3D图层------------------------------------------------------------
+			require(["esri/config",
+						"esri/Map",
+						"esri/views/MapView",
+						"esri/Graphic",
+						"esri/layers/GraphicsLayer",
+						"esri/geometry/Point",
+						"esri/PopupTemplate",
+						"esri/tasks/Locator"
+					], function(esriConfig, Map, MapView, Graphic, GraphicsLayer,Point,PopupTemplate,Locator) {
+						esriConfig.apiKey =
+							"AAPK56e3ac027f044c4089d8ceec232fc05dYaOuzVRzm8tMRqvzOvDvIEevbqJ85yppn9PacU6cy4duurJrVK9wo_8BcWO8i8bi";
+						const mainMap = new Map({
+							basemap: "satellite",
+							ground: "world-elevation"
+						});
+
+						// Create another Map, to be used in the overview "view"
+						// const overviewMap = new Map({
+						// 	basemap: "topo",
+						// });
+						const mainView = new MapView({
+							map: mainMap,
+							center: [104.07035941367775,31.749271896395],
+							zoom: 9, // Zoom level
+							container: "viewDiv" // Div element
+						});
+
+						mainMap.add(mainView);
+						// console.log(mainView.scale)
+						//添加切换图层的事件
+						document.getElementById('bm').addEventListener('change', function() {
+							mainMap.basemap = $('#bm').val()
+						});
+						
+// ----------------------------标记坐标点--------------------------------------------------------
+						graphicsLayer = new GraphicsLayer({
+							outFields: ["*"]
+						});
+						graphicsLayer.visible = true;
+						mainMap.add(graphicsLayer);
+						//使用ajax获取数据
+						var data;
+						const xmlHttpRequest = new XMLHttpRequest();
+						xmlHttpRequest.open('get', 'points.json');
+						xmlHttpRequest.send();
+						xmlHttpRequest.onreadystatechange = function() {
+							if (this.readyState === 4 && this.status === 200) {
+								// console.log(this.responseText);
+								data = JSON.parse(this.responseText);
+								console.log(data);
+								addPoints()
+							}
+						};
+						function addPoints() {
+							//遍历数据，添加point，并为其添加信息框
+							for (let i = 0; i < data.length; i++) {
+								const item = data[i];
+								
+								const pts = {
+									type: "point",
+									longitude: item.location[1],
+									latitude: item.location[0]
+								};
+								const simpleMarkerSymbol = {
+									type: "simple-marker",
+									color: [226, 119, 40], // Orange
+									outline: {
+										color: [255, 255, 255], // White
+										width: 1
+									}
+								};
+								// const textSymbol = {
+								//   type: "text", // autocasts as new TextSymbol()
+								//   color: "red",
+								//   text: item.name, // esri-icon-map-pin
+								//   font: {
+								//     size: 14
+								//     // family: "CalciteWebCoreIcons" 
+								//   }
+								// };
+								const ptsAtt = {
+									Name: item.name,
+									location: item.location,
+									image: item.image
+								};
+								const popupTemplate = {
+								    title: item.name,
+								    content: [{
+									 // Pass in the fields to display
+									    type: "text",
+									    text:item.description
+								    }]
+									// {
+									// 	type: "image", //图片
+									// 	value:{
+									// 		sourceURL:"https://ss2.meipian.me/users/4587663/a4a3d3b0-9525-11ea-a03e-c507a1f42aeb.JPG?imageView2/2/w/750/h/1400/q/80" //图片URL
+									//     }
+								 //   }
+								};
+								const pointGraphic = new Graphic({
+									geometry: pts,
+									symbol: simpleMarkerSymbol,
+									attributes: ptsAtt
+									// popupTemplate:popupTemplate
+									
+								});
+								pointGraphic.popupTemplate=popupTemplate;
+								graphicsLayer.add(pointGraphic);
+							};
+
+							mainView.on("click", function (event) {
+							    mainView.hitTest(event).then(function (response) {
+									if (response.results.length) {
+										let graphic = response.results.filter(function (result) {
+										// check if the graphic belongs to the layer of interest
+											return result.graphic.layer === graphicsLayer;
+										})[0].graphic;
+								
+									  // do something with the result graphic
+									// console.log(graphic.popupTemplate);
+									// alert(graphic.attributes.Name)
+									}
+							    });
+							});
+						};
+// ----------------------------点击切换到下一个场景-------------------------------------------------------------------------
+						mainView.ui.add("infoDiv", "bottom-left");
+						init_location=[30.994181490778338,103.4390570455498]
+						pts_location=[["漩口镇",30.994181490778338,103.4390570455498],
+									["映秀",31.059604778764324, 103.48753417020504 ],
+									["三江、紫坪铺、映秀",30.99444636018586,103.45267839781405],
+									["北川",31.60935616352138, 104.46890314954209],
+									["清平",31.541490134379654,104.11322507690258],
+									["康定",30.000656611467505,101.95433019952026],
+									["南坝镇",32.20258454924303,104.83340686153974],
+									["平武-青川",32.42491174632031,104.88624774135121],
+									["南部",33.470018703277354,105.71116690739397]
+									];
+						zoom_level=[15,15,12,13,14,13,13,11,9]
+						content=["<h2>5.12恐怖80秒</h2><p>汶川大地震发生于北京时间2008年5月12日14时28分4秒，震中位于四川省阿坝藏族羌族自治州汶川县映秀镇。<br><p>根据中国地震局修订后的数据，5·12汶川地震的面波震级为8.0级。根据日本气象厅的数据，5·12汶川地震的地震波确认共环绕了地球6圈。地震波及大半个中国以及亚洲多个国家和地区：中国国内北至内蒙古、东至上海、西至西藏、南至香港、台湾等地区均有震感；中国之外的泰国、越南、菲律宾和日本等国均有震感。</p><p>5·12汶川地震严重破坏地区约50万平方千米，其中，极重灾区共10个县（市），较重灾区共41个县（市），一般灾区共186个县（市）。截至2008年9月25日，5·12汶川地震共计造成69227人遇难、17923人失踪、374643人不同程度受伤。<br><p>图中为地震爆发最初80秒传播的区域，也是汶川大地震中受灾最严重的的地区。点击<b>“Next”</b>了解“恐怖80s”</p>",
+							"<p>5月12日14时28分4秒,汶川县漩口镇附近地下岩层突然发生断裂和错动，点燃了5.12特大地震的导火索。</p>",
+							"<p>2秒钟后，破裂激发的地震波到达地表。震源上方2公里外映秀镇的人们开始感觉地面突然抬升、房屋摇晃、窗户破裂。</p>",
+							"<p>又过了1秒，破裂沿着断层冲出地面，三江、紫坪铺、映秀等地房屋倒塌、山体崩裂。此时，汶川、都江堰、汉旺、成都震感明显 </p>",
+							"<p>25秒后，北川等地开始有了震感 </p>",
+							"<p>约40秒后，破裂在绵竹清平以北遭遇一个西北方向强硬断层的阻挡</p>",
+							"<p>数秒钟的对峙中，巨大能量向南传至康定又突然回头向北重返清平附近，形成两种能量的聚合 </p>",
+							"<p>48秒，断裂突然跳过安县、冲出地表，经擂鼓、漩坪，由南向北横穿整个北川县城，对建筑物和山体造成惨烈的破坏 </p>",
+							"<p> 然后，经北川、平武，60秒左右，抵达南坝镇</p>",
+							"<p>60秒后，破裂向北并未沿龙门山断裂带北段扩展，而是斜切平武-青川断裂，在隔壁邻居的地盘上来回肆虐，引发了最后一组连环爆炸 </p>",
+							"<p>80秒左右，地震虽成强弩之末，依然震撼了陕西、甘肃南部</p>"]
+						const infoDiv = document.getElementById("content");
+						infoDiv.innerHTML = content[0];
+						mainView.when(function() {
+							var index=0;
+							const button = document.getElementById("start-btn");
+							button.addEventListener("click", function() {
+								if (index<=pts_location.length){
+									goToView(index);
+									infoDiv.innerHTML = content[index+1];
+									index++
+								}
+								else{
+									let pt = new Point({
+									  latitude: init_location[0],
+									  longitude:init_location[1]
+									});
+									
+									let opts = {
+									  duration: 3000  // Duration of animation will be 5 seconds
+									};
+									
+									mainView.goTo({
+										target: pt,
+										zoom:9
+									}, opts);
+								}
+							});
+							function goToView(i){
+								// alert(pts_location[i])
+								// mainMap.remove(graphicsLayer);
+								if(i<5){
+									let pt = new Point({
+									  latitude: pts_location[i][1],
+									  longitude:pts_location[i][2]
+									});
+									
+									let opts = {
+									  duration: 3000 
+									};
+									mainView.goTo({
+										target: pt,
+										zoom: zoom_level[i]
+									}, opts);
+								}else if (i == 5){
+									// alert(i)
+									let pt1 = new Point({
+									  latitude: pts_location[4][1],
+									  longitude:pts_location[4][2]
+									});
+									let pt2 = new Point({
+									  latitude: pts_location[5][1],
+									  longitude:pts_location[5][2]
+									});
+									let opts = {
+									  duration: 5000  // Duration of animation will be 5 seconds
+									};
+									
+									// go to point at LOD 15 with custom duration
+									mainView.goTo({
+										target: pt2,
+										zoom: zoom_level[5]
+									}, opts).then(function(){
+										mainView.goTo({
+										target: pt1,
+										zoom: zoom_level[4]}, opts)
+									})
+								}else if(i==6){
+									let pt = new Point({
+									  latitude: pts_location[3][1],
+									  longitude:pts_location[3][2]
+									});
+									
+									let opts = {
+									  duration: 3000
+									};
+									
+									mainView.goTo({
+										target: pt,
+										zoom: zoom_level[3]
+									}, opts);
+								}else{
+									let pt = new Point({
+									  latitude: pts_location[i-1][1],
+									  longitude:pts_location[i-1][2]
+									});
+									
+									let opts = {
+									  duration: 3000  // Duration of animation will be 5 seconds
+									};
+									
+									mainView.goTo({
+										target: pt,
+										zoom: zoom_level[i-1]
+									}, opts);
+								}
+							}
+						});
+
+// ----------------------------显示坐标、比例尺-------------------------------------------------------------------------
+							mainView.on('pointer-move', function(e) {
+								//将屏幕坐标转化为经纬度
+								let point = mainView.toMap({
+									x: e.x,
+									y: e.y
+								});
+								//显示经纬度
+								$('#position').html("(" + point.latitude + ',' + point.longitude + ")");
+								// 显示比例尺(MapView自带属性scale)
+								let pscale = mainView.scale
+								$('#scaleNum').text("1/" + pscale)
+							});
+							// mainView.on('click', function(e) {
+							// 	//将屏幕坐标转化为经纬度
+							// 	let point = mainView.toMap({
+							// 		x: e.x,
+							// 		y: e.y
+							// 	});
+							// 	alert(point.latitude);
+							// 	alert(point.longitude);
+							// 	alert(mainView.zoom)
+							// })
+						});
+		</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	</body>
+
+</html>
